@@ -19,13 +19,14 @@ def show_image(image, t=0):
     cv2.waitKey(t)
 
 @torch.no_grad()
-def run(cfg, network, imagedir, calib, stride=1, skip=0, viz=False, timeit=False):
+def run(cfg, network, imagedir, calib, stride=1, skip=0, viz=False, timeit=False, fisheye=False):
 
     slam = None
     queue = Queue(maxsize=8)
 
+
     if os.path.isdir(imagedir):
-        reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, skip))
+        reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, skip, fisheye))
     else:
         reader = Process(target=video_stream, args=(queue, imagedir, calib, stride, skip))
 
@@ -67,6 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('--config', default="config/default.yaml")
     parser.add_argument('--timeit', action='store_true')
     parser.add_argument('--viz', action="store_true")
+    parser.add_argument('--fisheye', action="store_true")
     args = parser.parse_args()
 
     cfg.merge_from_file(args.config)
@@ -75,7 +77,7 @@ if __name__ == '__main__':
     print(cfg)
 
 
-    run(cfg, args.network, args.imagedir, args.calib, args.stride, args.skip, args.viz, args.timeit)
+    run(cfg, args.network, args.imagedir, args.calib, args.stride, args.skip, args.viz, args.timeit, args.fisheye)
 
 
         

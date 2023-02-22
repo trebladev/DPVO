@@ -32,12 +32,12 @@ def show_image(image, t=0):
     cv2.waitKey(t)
 
 @torch.no_grad()
-def run(cfg, network, imagedir, calib, stride=1, viz=False):
+def run(cfg, network, imagedir, calib, stride=1, viz=False, fisheye=True):
 
     slam = None
 
     queue = Queue(maxsize=8)
-    reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, 0))
+    reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, 0, fisheye))
     reader.start()
 
     while 1:
@@ -88,34 +88,34 @@ if __name__ == '__main__':
     torch.manual_seed(1234)
 
     tumvi_scenes = [
-        "corridor1",
-        "corridor2",
-        "corridor3",
-        "corridor4",
-        "corridor5",
+        # "corridor1",
+        # "corridor2",
+        # "corridor3",
+        # "corridor4",
+        # "corridor5",
         # "magistrale1",
-        "magistrale2",
-        "magistrale3",
-        "magistrale4",
-        "magistrale5",
+        # "magistrale2",
+        # "magistrale3",
+        # "magistrale4",
+        # "magistrale5",
         # "magistrale6",
-        "outdoors1",
-        "outdoors2",
-        "outdoors3",
-        "outdoors4",
-        "outdoors5",
-        "outdoors6",
-        "outdoors7",
-        "outdoors8",
+        # "outdoors1",
+        # "outdoors2",
+        # "outdoors3",
+        # "outdoors4",
+        # "outdoors5",
+        # "outdoors6",
+        # "outdoors7",
+        # "outdoors8",
         "room1",
         "room2",
         "room3",
         "room4",
         "room5",
         "room6",
-        "slides1",
-        "slides2",
-        "slides3",
+        # "slides1",
+        # "slides2",
+        # "slides3",
     ]
 
     results = {}

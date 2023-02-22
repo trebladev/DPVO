@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from multiprocessing import Process, Queue
 
-def image_stream(queue, imagedir, calib, stride, skip=0):
+def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     """ image generator """
 
     calib = np.loadtxt(calib, delimiter=" ")
@@ -19,21 +19,31 @@ def image_stream(queue, imagedir, calib, stride, skip=0):
 
     for t, imfile in enumerate(image_list):
         image = cv2.imread(os.path.join(imagedir, imfile))
-        if len(calib) > 4:
-            image = cv2.undistort(image, K, calib[4:])
-
-        if 0:
-            image = cv2.resize(image, None, fx=0.5, fy=0.5)
-            intrinsics = np.array([fx / 2, fy / 2, cx / 2, cy / 2])
-
-        else:
-            intrinsics = np.array([fx, fy, cx, cy])
+        if fisheye:
+            h,w = image.shape[:2]
+            DIM = (h,w)
+            map1, map2 = cv2.fisheye.initUndistortRectifyMap(K, calib[4:], np.eye(3), K, DIM, cv2.CV_16SC2)
+            undistorted_img = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            image = undistorted_img
             
+            intrinsics = np.array([fx, fy, cx, cy])
+        else:
+            if len(calib) > 4:
+                image = cv2.undistort(image, K, calib[4:])
+                # show_image(image)
+    
+            if 0:
+                image = cv2.resize(image, None, fx=0.5, fy=0.5)
+                intrinsics = np.array([fx / 2, fy / 2, cx / 2, cy / 2])
+    
+            else:
+                intrinsics = np.array([fx, fy, cx, cy])
+                
         h, w, _ = image.shape
         image = image[:h-h%16, :w-w%16]
-
+    
         queue.put((t, image, intrinsics))
-
+    
     queue.put((-1, image, intrinsics))
 
 
