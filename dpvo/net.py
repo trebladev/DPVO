@@ -107,7 +107,7 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False):
+    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
@@ -148,9 +148,9 @@ class Patchifier(nn.Module):
         index = index.repeat(1, patches_per_image).reshape(-1)
 
         if return_color:
-            return fmap, gmap, imap, patches, index, clr
+            return fmap, gmap, imap, patches, index, coords, clr
 
-        return fmap, gmap, imap, patches, index
+        return fmap, gmap, imap, patches, index, coords
 
 
 class CorrBlock:
@@ -188,7 +188,7 @@ class VONet(nn.Module):
         intrinsics = intrinsics / 4.0
         disps = disps[:, :, 1::4, 1::4].float()
 
-        fmap, gmap, imap, patches, ix = self.patchify(images, disps=disps)
+        fmap, gmap, imap, patches, ix, coords = self.patchify(images, disps=disps)
 
         corr_fn = CorrBlock(fmap, gmap)
 

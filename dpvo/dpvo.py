@@ -11,6 +11,8 @@ from .net import VONet
 from .utils import *
 from . import projective_ops as pops
 
+import cv2
+
 autocast = torch.cuda.amp.autocast
 Id = SE3.Identity(1, device="cuda")
 
@@ -81,6 +83,8 @@ class DPVO:
 
         # store relative poses for removed frames
         self.delta = {}
+
+        self.first = True
 
         self.viewer = None
         if viz:
@@ -314,22 +318,73 @@ class DPVO:
         t1 = self.M * max((self.n - 0), 0)
         return flatmeshgrid(torch.arange(t0, t1, device="cuda"),
             torch.arange(max(self.n-r, 0), self.n, device="cuda"), indexing='ij')
+    
+    def draw_keypoints(self, coords, image):
+        _, h, w = image.shape
+        mask = torch.ones((h, w)).cuda()
+        for i in range(len(coords)):
+            # x = int(coords[i, 0])
+            # y = int(coords[i, 1])
+            x = 100
+            y = 100
+            x1 = x - 10
+            y1 = y - 10
+            x2 = x + 10
+            y2 = y + 10
+        
+            # draw keypoint center
+            # mask[max(0,x-2):min(w,x+2), max(0,y-2):min(h,y+2)] = 0
+            mask[max(0, y-2):min(h, y+2), max(0, x-2):min(w, x+2)] = 0
+            
+            # draw keypoint box
+            # mask[x1:x1+2, y1:y2] = 0
+            # mask[x2-2:x2, y1:y2] = 0
+            # mask[x1:x2, y1:y1+2] = 0
+            # mask[x1:x2, y2-2:y2] = 0
+            mask[y1:y1+2, x1:x2] = 0
+            mask[y2-2:y2, x1:x2] = 0
+            mask[y1:y2, x1:x1+2] = 0
+            mask[y1:y2, x2-2:x2] = 0
+            
+        # red = torch.tensor([1.0, 0.0, 0.0]).cuda()
+        mask = mask.type_as(image)
+        image *= mask.unsqueeze(0).repeat(3,1,1)
+        # image[:, x, y] = red
+        
+        return image
+        
 
     def __call__(self, tstamp, image, intrinsics):
         """ track new frame """
 
-        if self.viewer is not None:
-            self.viewer.update_image(image)
+        image_show = image
+        # c, h, w = image_show.shape
+        
+        # if self.viewer is not None:
+            # self.viewer.update_image(image)
 
         image = 2 * (image[None,None] / 255.0) - 0.5
         
         with autocast(enabled=self.cfg.MIXED_PRECISION):
-            fmap, gmap, imap, patches, _, clr = \
+            fmap, gmap, imap, patches, _, coords, clr = \
                 self.network.patchify(image,
                     patches_per_image=self.cfg.PATCHES_PER_FRAME, 
                     gradient_bias=self.cfg.GRADIENT_BIAS, 
                     return_color=True)
 
+        ### add keypoints coords to image ###
+        coords = coords[0,:,:] * 4
+
+        image_show = self.draw_keypoints(coords, image_show)
+        
+        if self.first:
+            image_save = image_show.permute(1, 2, 0).cpu().numpy()
+            cv2.imwrite("image.png", image_save)
+            self.first = False
+        
+        if self.viewer is not None:
+            self.viewer.update_image(image_show) 
+            
         ### update state attributes ###
         self.tlist.append(tstamp)
         self.tstamps_[self.n] = self.counter
