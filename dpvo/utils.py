@@ -27,7 +27,14 @@ class Timer:
             all_times.append(elapsed)
             print(self.name, elapsed)
 
-
+"""
+@brief: 3D coordinate grid
+@param: b: batch size
+@param: n: number of frames
+@param: h: height
+@param: w: width
+@return: coordinate grid, shape (b, n, 2, h, w)
+"""
 def coords_grid(b, n, h, w, **kwargs):
     """ coordinate grid """
     x = torch.arange(0, w, dtype=torch.float, **kwargs)
@@ -35,6 +42,11 @@ def coords_grid(b, n, h, w, **kwargs):
     coords = torch.stack(torch.meshgrid(y, x, indexing="ij"))
     return coords[[1,0]].view(1, 1, 2, h, w).repeat(b, n, 1, 1, 1)
 
+"""
+@brief: 3D coordinate grid with frame index
+@param: d: origin grid, shape (b, n, h, w)
+@return: coordinate grid, shape (b, n, 3, h, w)
+"""
 def coords_grid_with_index(d, **kwargs):
     """ coordinate grid with frame index"""
     b, n, h, w = d.shape
@@ -42,6 +54,7 @@ def coords_grid_with_index(d, **kwargs):
     x = torch.arange(0, w, dtype=torch.float, **kwargs)
     y = torch.arange(0, h, dtype=torch.float, **kwargs)
 
+    # torch.meshgrid is 
     y, x = torch.stack(torch.meshgrid(y, x, indexing="ij"))
     y = y.view(1, 1, h, w).repeat(b, n, 1, 1)
     x = x.view(1, 1, h, w).repeat(b, n, 1, 1)

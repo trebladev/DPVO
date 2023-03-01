@@ -91,6 +91,50 @@ class Update(nn.Module):
 
         return net, (self.d(net), self.w(net), None)
 
+# a SPP Layer
+class SPPLayer(nn.Module):
+    def __init__(self, num_levels, pool_type='max_pool'):
+        super(SPPLayer, self).__init__()
+
+        self.num_levels = num_levels
+        self.pool_type = pool_type
+
+    def forward(self, x):
+        """ x: (b, c, h, w) """
+        b, c, h, w = x.size()
+        for i in range(self.num_levels):
+            level = i+1
+            kernel_size = (h//level, w//level)
+            stride = (h//level, w//level)
+            padding = (0, 0)
+            if self.pool_type == 'max_pool':
+                tensor = F.max_pool2d(x, kernel_size, stride, padding)
+            elif self.pool_type == 'avg_pool':
+                tensor = F.avg_pool2d(x, kernel_size, stride, padding)
+            else:
+                raise NotImplementedError
+            if (i == 0):
+                spp = tensor.view(b, -1)
+            else:
+                spp = torch.cat((spp, tensor.view(b, -1)), 1)
+        return spp
+
+class Patchchosen(nn.Module):
+    def __init__(self):
+        super(Patchchosen, self).__init__()
+        self.SPP = SPPLayer(4, pool_type='max_pool')
+
+        self.m = nn.Sequential(
+            nn.Linear(3840, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 96*2)
+        )
+
+    def forward(self, net):
+        net = self.SPP(net)
+        net = torch.flatten(net, 1)
+        net = self.m(net)
+        return net.view(96, 2)
 
 class Patchifier(nn.Module):
     def __init__(self, patch_size=3):
@@ -98,6 +142,7 @@ class Patchifier(nn.Module):
         self.patch_size = patch_size
         self.fnet = BasicEncoder4(output_dim=128, norm_fn='instance')
         self.inet = BasicEncoder4(output_dim=DIM, norm_fn='none')
+        self.patch = Patchchosen()
 
     def __image_gradient(self, images):
         gray = ((images + 0.5) * (255.0 / 2)).sum(dim=2)
@@ -107,7 +152,7 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False):
+    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False, nn=True):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
@@ -126,6 +171,28 @@ class Patchifier(nn.Module):
             ix = torch.argsort(g)
             x = x[:, ix[-patches_per_image:]]
             y = y[:, ix[-patches_per_image:]]
+        
+        
+        elif nn:
+            for i in range(n):
+                fmap_c = fmap[:, i, :, :, :].cuda() 
+                d = self.patch(fmap_c)
+                d = F.normalize(d, p=2, dim=1)
+                d = (d+1) / 2
+                x_ = d[:, 0].view(1, patches_per_image).cuda() * (w - 3) + 3
+                x_ = x_.int() 
+                y_ = d[:, 1].view(1, patches_per_image).cuda() * (h - 3) + 3
+                y_ = y_.int()
+                if i == 0:
+                    x = x_ 
+                    y = y_
+                else:
+                    y = torch.cat((y, y_), dim=0)
+                    x = torch.cat((x, x_), dim=0)
+            # print(x.shape, y.shape)
+            # print(n, patches_per_image)
+            assert x.shape == (n, patches_per_image)
+            assert y.shape == (n, patches_per_image)
 
         else:
             x = torch.randint(1, w-1, size=[n, patches_per_image], device="cuda")
@@ -188,7 +255,7 @@ class VONet(nn.Module):
         intrinsics = intrinsics / 4.0
         disps = disps[:, :, 1::4, 1::4].float()
 
-        fmap, gmap, imap, patches, ix, coords = self.patchify(images, disps=disps)
+        fmap, gmap, imap, patches, ix, coords = self.patchify(images, disps=disps, nn=True)
 
         corr_fn = CorrBlock(fmap, gmap)
 
