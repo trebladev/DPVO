@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 from multiprocessing import Process, Queue
+from pathlib import Path
 
 def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     """ image generator """
@@ -15,10 +16,10 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     K[1,1] = fy
     K[1,2] = cy
 
-    image_list = sorted(os.listdir(imagedir))[skip::stride]
+    image_list = sorted(Path(imagedir).glob('*.png'))[skip::stride]
 
     for t, imfile in enumerate(image_list):
-        image = cv2.imread(os.path.join(imagedir, imfile))
+        image = cv2.imread(str(imfile))
         if fisheye:
             h,w = image.shape[:2]
             DIM = (h,w)
@@ -38,7 +39,6 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     
             else:
                 intrinsics = np.array([fx, fy, cx, cy])
-                
         h, w, _ = image.shape
         image = image[:h-h%16, :w-w%16]
     
