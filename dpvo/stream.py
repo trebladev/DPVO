@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from multiprocessing import Process, Queue
 from pathlib import Path
+import time
 
 def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     """ image generator """
@@ -21,10 +22,13 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     for t, imfile in enumerate(image_list):
         image = cv2.imread(str(imfile))
         if fisheye:
+            time_start = time.time()
             h,w = image.shape[:2]
             DIM = (h,w)
             map1, map2 = cv2.fisheye.initUndistortRectifyMap(K, calib[4:], np.eye(3), K, DIM, cv2.CV_16SC2)
             undistorted_img = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            time_end = time.time()
+            print('time cost', time_end-time_start, 's')
             image = undistorted_img
             
             intrinsics = np.array([fx, fy, cx, cy])
