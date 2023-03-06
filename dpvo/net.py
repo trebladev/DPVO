@@ -122,15 +122,28 @@ class SPPLayer(nn.Module):
 class Patchchosen(nn.Module):
     def __init__(self):
         super(Patchchosen, self).__init__()
-        self.SPP = SPPLayer(4, pool_type='max_pool')
+        self.SPP = SPPLayer(8, pool_type='max_pool')
 
+        self.conv1 = nn.Conv2d(128, 64, 3, 2, 1)
+        self.conv2 = nn.Conv2d(64, 32, 3, 2, 1)
+        self.conv3 = nn.Conv2d(32, 8, 1, 1, 0)
+        
+        # use a MLP to predict the 2D coordinates of the 96 patches
         self.m = nn.Sequential(
-            nn.Linear(3840, 1024),
+            nn.Linear(1816, 1024),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, 96*2)
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 96*2)
         )
 
     def forward(self, net):
+        net = self.conv1(net)
+        net = self.conv2(net)
+        net = self.conv3(net)
+        print(net.shape)
         net = self.SPP(net)
         net = torch.flatten(net, 1)
         net = self.m(net)
@@ -152,12 +165,13 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False, nn=True):
+    def forward(self, images, patches_per_image=96, disps=None, gradient_bias=False, return_color=False, return_coords=False, nn=True):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
 
         b, n, c, h, w = fmap.shape
+        print(fmap.shape)
 
         # bias patch selection towards regions with high gradient
         if gradient_bias:

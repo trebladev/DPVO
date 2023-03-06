@@ -17,6 +17,9 @@ import torch.nn.functional as F
 from dpvo.net import VONet
 from evaluate_tartan import evaluate as validate
 
+from torch.utils.tensorboard import SummaryWriter
+import sys
+
 
 def show_image(image):
     image = image.permute(1, 2, 0).cpu().numpy()
@@ -61,10 +64,38 @@ def train(args):
             new_state_dict[k.replace('module.', '')] = v
         net.load_state_dict(new_state_dict, strict=False)
 
-    optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-6)
+        for name, param in net.named_parameters():
+            if name.startswith('patchify.patch'):
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+            print(name, param.requires_grad)
+        # for name, module in net.named_modules():
+            # for param in module.parameters():
+                # param.requires_grad = False
+            # if not name.startswith('patchify.patch'):
+                # print(name, module.__class__.__name__)
+                # for param in module.parameters():
+                    # param.requires_grad = False
+            
+            
+        # for name, module in net.():
+            # print((name, module.__class__.__name__))
+            
+    # sys.exit(0)
+    # optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-6)
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=args.lr, weight_decay=1e-6)
 
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
         args.lr, args.steps, pct_start=0.01, cycle_momentum=False, anneal_strategy='linear')
+
+    # filtered_params = list(filter(lambda p: p.requires_grad, net.parameters()))
+    # print(len(filtered_params))
+    # for i in range(len(filtered_params)):
+        # filtered_params[i] = filtered_params[i].to('cuda')        
+
+    # net.train()
+    # net.cuda()
 
     if rank == 0:
         logger = Logger(args.name, scheduler)
@@ -118,6 +149,7 @@ def train(args):
 
             # kl is 0 (not longer used)
             loss += kl
+            loss.requires_grad = True
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(net.parameters(), args.clip)
@@ -125,6 +157,16 @@ def train(args):
             scheduler.step()
 
             total_steps += 1
+
+            # writer.add_scalar('loss', loss.item(), total_steps)
+            # writer.add_scalar('kl', kl.item(), total_steps)
+            # writer.add_scalar('px1', (e < .25).float().mean().item(), total_steps)
+            # writer.add_scalar('ro', ro.float().mean().item(), total_steps)
+            # writer.add_scalar('tr', tr.float().mean().item(), total_steps)
+            # writer.add_scalar('r1', (ro < .001).float().mean().item(), total_steps)
+            # writer.add_scalar('r2', (ro < .01).float().mean().item(), total_steps)
+            # writer.add_scalar('t1', (tr < .001).float().mean().item(), total_steps)
+            # writer.add_scalar('t2', (tr < .01).float().mean().item(), total_steps)
 
             metrics = {
                 "loss": loss.item(),
@@ -159,13 +201,14 @@ def train(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--name', default='bla', help='name your experiment')
-    parser.add_argument('--ckpt', help='checkpoint to restore')
+    parser.add_argument('--ckpt', help='dpvo.pth')
     parser.add_argument('--steps', type=int, default=240000)
     parser.add_argument('--lr', type=float, default=0.00008)
     parser.add_argument('--clip', type=float, default=10.0)
     parser.add_argument('--n_frames', type=int, default=15)
     parser.add_argument('--pose_weight', type=float, default=10.0)
     parser.add_argument('--flow_weight', type=float, default=0.1)
+    parser.add_argument('--batch_size', type=int, default=4)
     args = parser.parse_args()
 
     train(args)

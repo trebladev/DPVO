@@ -90,7 +90,7 @@ class DPVO:
         if viz:
             self.start_viewer()
 
-    def load_weights(self, network):
+    def load_weights(self, network, pretrained=False):
         # load network from checkpoint file
         if isinstance(network, str):
             from collections import OrderedDict
@@ -101,7 +101,7 @@ class DPVO:
                     new_state_dict[k.replace('module.', '')] = v
             
             self.network = VONet()
-            self.network.load_state_dict(new_state_dict)
+            self.network.load_state_dict(new_state_dict, strict=False)
 
         else:
             self.network = network
