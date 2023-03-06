@@ -39,6 +39,7 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     
             else:
                 intrinsics = np.array([fx, fy, cx, cy])
+                
         h, w, _ = image.shape
         image = image[:h-h%16, :w-w%16]
     
