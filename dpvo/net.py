@@ -97,6 +97,7 @@ class Patchchosen(nn.Module):
         super(Patchchosen, self).__init__()
         # self.SPP = SPPLayer(8, pool_type='max_pool')
 
+        # use a CNN to extract features from the feature map
         self.c1 = nn.Sequential(
             nn.Conv2d(128, 64, 3, 2, 1),
             nn.BatchNorm2d(64),
@@ -109,6 +110,8 @@ class Patchchosen(nn.Module):
             nn.ReLU(inplace=True),
             nn.AdaptiveAvgPool2d(output_size=(32, 32))
         )
+
+        # use a CNN to extract features from the match map
         self.c2 = nn.Sequential(
             nn.Conv2d(384, 96, 3, 2, 1),
             nn.BatchNorm2d(96),
