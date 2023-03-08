@@ -92,12 +92,64 @@ class Update(nn.Module):
         return net, (self.d(net), self.w(net), None)
 
 
+class Patchchosen(nn.Module):
+    def __init__(self):
+        super(Patchchosen, self).__init__()
+        # self.SPP = SPPLayer(8, pool_type='max_pool')
+
+        self.c1 = nn.Sequential(
+            nn.Conv2d(128, 64, 3, 2, 1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 32, 3, 2, 1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 4, 1, 1, 0),
+            nn.BatchNorm2d(4),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(output_size=(32, 32))
+        )
+        self.c2 = nn.Sequential(
+            nn.Conv2d(384, 96, 3, 2, 1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(96, 32, 3, 2, 1), 
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 4, 1, 1, 0),
+            nn.BatchNorm2d(4),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(output_size=(32, 32))
+        )
+        
+        # use a MLP to predict the 2D coordinates of the 96 patches
+        self.m = nn.Sequential(
+            nn.Linear(4096, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 96*2)
+        )
+
+    def forward(self, fmap, imap):
+        fmap = self.c1(fmap)
+        assert fmap.shape[2] == 32 and fmap.shape[3] == 32 and fmap.shape[1] == 4
+        imap = self.c2(imap)
+        assert imap.shape[2] == 32 and imap.shape[3] == 32 and imap.shape[1] == 4
+        net = fmap + imap
+        net = torch.flatten(net, 1)
+        net = self.m(net)
+        return net.view(96, 2)
+
 class Patchifier(nn.Module):
     def __init__(self, patch_size=3):
         super(Patchifier, self).__init__()
         self.patch_size = patch_size
         self.fnet = BasicEncoder4(output_dim=128, norm_fn='instance')
         self.inet = BasicEncoder4(output_dim=DIM, norm_fn='none')
+        self.patch = Patchchosen()
 
     def __image_gradient(self, images):
         gray = ((images + 0.5) * (255.0 / 2)).sum(dim=2)
@@ -107,7 +159,7 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False):
+    def forward(self, images, patches_per_image=96, disps=None, gradient_bias=False, return_color=False, return_coords=False):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
@@ -126,6 +178,29 @@ class Patchifier(nn.Module):
             ix = torch.argsort(g)
             x = x[:, ix[-patches_per_image:]]
             y = y[:, ix[-patches_per_image:]]
+        
+        # use network to predict patch coordinates
+        elif nn:
+            for i in range(n):
+                fmap_c = fmap[:, i, :, :, :].clone().cuda() 
+                imap_c = imap[:, i, :, :, :].clone().cuda()
+                d = self.patch(fmap_c, imap_c)
+                d = F.normalize(d, p=2, dim=1)
+                d = (d+1) / 2
+                x_ = d[:, 0].view(1, patches_per_image).cuda() * (w - 3) + 3
+                x_ = x_.int() 
+                y_ = d[:, 1].view(1, patches_per_image).cuda() * (h - 3) + 3
+                y_ = y_.int()
+                if i == 0:
+                    x = x_ 
+                    y = y_
+                else:
+                    y = torch.cat((y, y_), dim=0)
+                    x = torch.cat((x, x_), dim=0)
+                # print(x.shape, y.shape)
+                # print(n, patches_per_image)
+            assert x.shape == (n, patches_per_image)
+            assert y.shape == (n, patches_per_image)
 
         else:
             x = torch.randint(1, w-1, size=[n, patches_per_image], device="cuda")

@@ -12,7 +12,7 @@ from dpvo.utils import Timer
 from dpvo.config import cfg
 
 from dpvo.data_readers.tartan import test_split as val_split
-from dpvo.plot_utils import plot_trajectory, save_trajectory_tum_format
+# from dpvo.plot_utils import plot_trajectory, save_trajectory_tum_format
 
 test_split = \
     ["MH%03d"%i for i in range(8)] + \
@@ -40,7 +40,7 @@ def video_iterator(imagedir, ext=".png", preload=True):
         yield image.cuda(), intrinsics.cuda()
 
 @torch.no_grad()
-def run(imagedir, cfg, network, viz=False):
+def run(imagedir, cfg, network, viz=False, reimage=False):
     slam = DPVO(cfg, network, ht=480, wd=640, viz=viz)
 
     for t, (image, intrinsics) in enumerate(video_iterator(imagedir)):
@@ -52,8 +52,13 @@ def run(imagedir, cfg, network, viz=False):
 
     for _ in range(12):
         slam.update()
+    
+    traj_est, tstamps = slam.terminate()
+    # if required, return the first image
+    if reimage:
+        return traj_est, tstamps, slam.firstimage
 
-    return slam.terminate()
+    return traj_est, tstamps
 
 
 def ate(traj_ref, traj_est, timestamps):
@@ -79,7 +84,7 @@ def ate(traj_ref, traj_est, timestamps):
 
 
 @torch.no_grad()
-def evaluate(config, net, split="validation", trials=1, plot=False, save=False):
+def evaluate(config, net, split="validation", trials=1, plot=False, save=False, reimage=False):
 
     if config is None:
         config = cfg
@@ -107,7 +112,8 @@ def evaluate(config, net, split="validation", trials=1, plot=False, save=False):
                 traj_ref = osp.join("datasets/TartanAir", scene, "pose_left.txt")
 
             # run the slam system
-            traj_est, tstamps = run(scene_path, config, net)
+            traj_est, tstamps, firstimage = run(scene_path, config, net, viz=False, reimage=True)
+            # traj_est, tstamps = run(scene_path, config, net, viz=False, reimage=False)
 
             PERM = [1, 2, 0, 4, 5, 3, 6] # ned -> xyz
             traj_ref = np.loadtxt(traj_ref, delimiter=" ")[::STRIDE, PERM]
@@ -117,15 +123,15 @@ def evaluate(config, net, split="validation", trials=1, plot=False, save=False):
             all_results.append(ate_score)
             results[scene].append(ate_score)
 
-            if plot:
-                scene_name = '_'.join(scene.split('/')[1:]).title()
-                Path("trajectory_plots").mkdir(exist_ok=True)
-                plot_trajectory((traj_est, tstamps), (traj_ref, tstamps), f"TartanAir {scene_name.replace('_', ' ')} Trial #{j+1} (ATE: {ate_score:.03f})",
-                                f"trajectory_plots/TartanAir_{scene_name}_Trial{j+1:02d}.pdf", align=True, correct_scale=True)
+            # if plot:
+                # scene_name = '_'.join(scene.split('/')[1:]).title()
+                # Path("trajectory_plots").mkdir(exist_ok=True)
+                # plot_trajectory((traj_est, tstamps), (traj_ref, tstamps), f"TartanAir {scene_name.replace('_', ' ')} Trial #{j+1} (ATE: {ate_score:.03f})",
+                                # f"trajectory_plots/TartanAir_{scene_name}_Trial{j+1:02d}.pdf", align=True, correct_scale=True)
 
-            if save:
-                Path("saved_trajectories").mkdir(exist_ok=True)
-                save_trajectory_tum_format((traj_est, tstamps), f"saved_trajectories/TartanAir_{scene_name}_Trial{j+1:02d}.txt")
+            # if save:
+                # Path("saved_trajectories").mkdir(exist_ok=True)
+                # save_trajectory_tum_format((traj_est, tstamps), f"saved_trajectories/TartanAir_{scene_name}_Trial{j+1:02d}.txt")
 
         print(scene, sorted(results[scene]))
 
@@ -144,6 +150,9 @@ def evaluate(config, net, split="validation", trials=1, plot=False, save=False):
     results_dict["AUC"] = np.maximum(1 - np.array(ates), 0).mean()
     results_dict["AVG"] = np.mean(xs)
 
+    if reimage:
+        return results_dict, firstimage
+
     return results_dict
 
 
@@ -153,7 +162,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--viz', action="store_true")
     parser.add_argument('--id', type=int, default=-1)
-    parser.add_argument('--weights', default="dpvo.pth")
+    parser.add_argument('--weights', default="checkpoints/conv-2.0_010000.pth")
     parser.add_argument('--config', default="config/default.yaml")
     parser.add_argument('--split', default="validation")
     parser.add_argument('--trials', type=int, default=1)

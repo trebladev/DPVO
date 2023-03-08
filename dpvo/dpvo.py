@@ -86,6 +86,9 @@ class DPVO:
 
         self.first = True
 
+        # store first image with patches
+        self.firstimage = None
+
         self.viewer = None
         if viz:
             self.start_viewer()
@@ -101,7 +104,7 @@ class DPVO:
                     new_state_dict[k.replace('module.', '')] = v
             
             self.network = VONet()
-            self.network.load_state_dict(new_state_dict)
+            self.network.load_state_dict(new_state_dict, strict=False)
 
         else:
             self.network = network
@@ -323,10 +326,10 @@ class DPVO:
         _, h, w = image.shape
         mask = torch.ones((h, w)).cuda()
         for i in range(len(coords)):
-            # x = int(coords[i, 0])
-            # y = int(coords[i, 1])
-            x = 100
-            y = 100
+            x = int(coords[i, 0])
+            y = int(coords[i, 1])
+            # x = 100
+            # y = 100
             x1 = x - 10
             y1 = y - 10
             x2 = x + 10
@@ -379,6 +382,11 @@ class DPVO:
         
         if self.first:
             image_save = image_show.permute(1, 2, 0).cpu().numpy()
+            self.firstimage = image_show
+            # if logger is not None:
+                # logger.write_image("first_frame", image_save) # write image to tensorboard
+            # else:
+                # cv2.imwrite("image.png", image_save)
             cv2.imwrite("image.png", image_save)
             self.first = False
         

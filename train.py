@@ -59,7 +59,7 @@ def train(args):
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
             new_state_dict[k.replace('module.', '')] = v
-        net.load_state_dict(new_state_dict, strict=False)
+        net.load_state_dict(new_state_dict)
 
     optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-6)
 
@@ -141,6 +141,9 @@ def train(args):
             if rank == 0:
                 logger.push(metrics)
 
+            # if total_steps == 2000:
+                # validation_results, firstimage = validate(None, net, reimage=True)
+
             if total_steps % 10000 == 0:
                 torch.cuda.empty_cache()
 
@@ -148,7 +151,11 @@ def train(args):
                     PATH = 'checkpoints/%s_%06d.pth' % (args.name, total_steps)
                     torch.save(net.state_dict(), PATH)
 
-                validation_results = validate(None, net)
+                validation_results, firstimage = validate(None, net, reimage=True)
+
+                if rank == 0:
+                    logger.write_image("firstimage", firstimage)
+                
                 if rank == 0:
                     logger.write_dict(validation_results)
 
