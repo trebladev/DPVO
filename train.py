@@ -55,13 +55,32 @@ def train(args):
     net.cuda()
 
     if args.ckpt is not None:
-        state_dict = torch.load(args.ckpt)
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            new_state_dict[k.replace('module.', '')] = v
-        net.load_state_dict(new_state_dict)
+        # if need forzen some layers
+        if args.forzen:
+            state_dict = torch.load(args.ckpt)
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                new_state_dict[k.replace('module.', '')] = v
+            net.load_state_dict(new_state_dict, strict=False) # use pretrain model
 
-    optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-6)
+            for name, param in net.named_parameters():
+                if name.startswith('patchify.patch'):
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+                print(name, param.requires_grad)
+
+        else: 
+            state_dict = torch.load(args.ckpt)
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                new_state_dict[k.replace('module.', '')] = v
+            net.load_state_dict(new_state_dict)
+
+    if args.forzen:
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=args.lr, weight_decay=1e-6)
+    else:
+        optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-6)
 
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
         args.lr, args.steps, pct_start=0.01, cycle_momentum=False, anneal_strategy='linear')
@@ -118,6 +137,8 @@ def train(args):
 
             # kl is 0 (not longer used)
             loss += kl
+            if args.forzen:
+                loss.requires_grad = True
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(net.parameters(), args.clip)
@@ -173,6 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_frames', type=int, default=15)
     parser.add_argument('--pose_weight', type=float, default=10.0)
     parser.add_argument('--flow_weight', type=float, default=0.1)
+    parser.add_argument('--forzen', action='store_true')
     args = parser.parse_args()
 
     train(args)

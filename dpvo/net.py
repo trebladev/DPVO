@@ -135,13 +135,27 @@ class Patchchosen(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(256, 96*2)
         )
+        
+        def init_weights(layer):
+            # 如果为卷积层，使用正态分布初始化
+            if type(layer) == nn.Conv1d:
+                nn.init.normal_(layer.weight, mean=-1, std=0.5)
+            # 如果为全连接层，权重使用均匀分布初始化，偏置初始化为-1.1
+            elif type(layer) == nn.Linear:
+                nn.init.uniform_(layer.weight, a=-1.1, b=0.1)
+                nn.init.constant_(layer.bias, -1.1)
+        
+        self.apply(init_weights)
+        
+        
 
     def forward(self, fmap, imap):
         fmap = self.c1(fmap)
         assert fmap.shape[2] == 32 and fmap.shape[3] == 32 and fmap.shape[1] == 4
-        imap = self.c2(imap)
-        assert imap.shape[2] == 32 and imap.shape[3] == 32 and imap.shape[1] == 4
-        net = fmap + imap
+        # imap = self.c2(imap)
+        # assert imap.shape[2] == 32 and imap.shape[3] == 32 and imap.shape[1] == 4
+        # net = fmap + imap
+        net = fmap
         net = torch.flatten(net, 1)
         net = self.m(net)
         return net.view(96, 2)
@@ -161,8 +175,10 @@ class Patchifier(nn.Module):
         g = torch.sqrt(dx**2 + dy**2)
         g = F.avg_pool2d(g, 4, 4)
         return g
+    
+   
 
-    def forward(self, images, patches_per_image=96, disps=None, gradient_bias=False, return_color=False, return_coords=False):
+    def forward(self, images, patches_per_image=96, disps=None, gradient_bias=False, return_color=False, return_coords=False, keynet=True):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
@@ -183,7 +199,7 @@ class Patchifier(nn.Module):
             y = y[:, ix[-patches_per_image:]]
         
         # use network to predict patch coordinates
-        elif nn:
+        elif keynet:
             for i in range(n):
                 fmap_c = fmap[:, i, :, :, :].clone().cuda() 
                 imap_c = imap[:, i, :, :, :].clone().cuda()
@@ -200,10 +216,13 @@ class Patchifier(nn.Module):
                 else:
                     y = torch.cat((y, y_), dim=0)
                     x = torch.cat((x, x_), dim=0)
+            
                 # print(x.shape, y.shape)
                 # print(n, patches_per_image)
             assert x.shape == (n, patches_per_image)
             assert y.shape == (n, patches_per_image)
+            # write x, y to same file
+            
 
         else:
             x = torch.randint(1, w-1, size=[n, patches_per_image], device="cuda")
@@ -266,7 +285,7 @@ class VONet(nn.Module):
         intrinsics = intrinsics / 4.0
         disps = disps[:, :, 1::4, 1::4].float()
 
-        fmap, gmap, imap, patches, ix, coords = self.patchify(images, disps=disps)
+        fmap, gmap, imap, patches, ix, coords = self.patchify(images, disps=disps, keynet=True)
 
         corr_fn = CorrBlock(fmap, gmap)
 
