@@ -323,10 +323,10 @@ class DPVO:
         _, h, w = image.shape
         mask = torch.ones((h, w)).cuda()
         for i in range(len(coords)):
-            # x = int(coords[i, 0])
-            # y = int(coords[i, 1])
-            x = 100
-            y = 100
+            x = int(coords[i, 0])
+            y = int(coords[i, 1])
+            # x = 100
+            # y = 100
             x1 = x - 10
             y1 = y - 10
             x2 = x + 10
@@ -354,7 +354,7 @@ class DPVO:
         return image
         
 
-    def __call__(self, tstamp, image, intrinsics):
+    def __call__(self, tstamp, image, intrinsics, keypoint=None):
         """ track new frame """
 
         image_show = image
@@ -364,13 +364,20 @@ class DPVO:
             # self.viewer.update_image(image)
 
         image = 2 * (image[None,None] / 255.0) - 0.5
-        
-        with autocast(enabled=self.cfg.MIXED_PRECISION):
-            fmap, gmap, imap, patches, _, coords, clr = \
-                self.network.patchify(image,
-                    patches_per_image=self.cfg.PATCHES_PER_FRAME, 
-                    gradient_bias=self.cfg.GRADIENT_BIAS, 
-                    return_color=True)
+        if keypoint is not None:
+            with autocast(enabled=self.cfg.MIXED_PRECISION):
+                fmap, gmap, imap, patches, _, coords, clr = \
+                    self.network.patchify(image,
+                        patches_per_image=self.cfg.PATCHES_PER_FRAME, 
+                        gradient_bias=self.cfg.GRADIENT_BIAS, 
+                        return_color=True, keypoint=keypoint)
+        else:
+            with autocast(enabled=self.cfg.MIXED_PRECISION):
+                fmap, gmap, imap, patches, _, coords, clr = \
+                    self.network.patchify(image,
+                        patches_per_image=self.cfg.PATCHES_PER_FRAME, 
+                        gradient_bias=self.cfg.GRADIENT_BIAS, 
+                        return_color=True)
 
         ### add keypoints coords to image ###
         coords = coords[0,:,:] * 4
@@ -379,6 +386,7 @@ class DPVO:
         
         if self.first:
             image_save = image_show.permute(1, 2, 0).cpu().numpy()
+            # draw_keypoints(coords, image_save)
             cv2.imwrite("image.png", image_save)
             self.first = False
         

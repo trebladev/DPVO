@@ -34,20 +34,28 @@ def show_image(image, t=0):
     cv2.waitKey(t)
 
 @torch.no_grad()
-def run(cfg, network, imagedir, calib, stride=1, viz=False):
+def run(cfg, network, imagedir, calib, stride=1, viz=False, superpoint=False):
 
     slam = None
 
     queue = Queue(maxsize=8)
-    reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, 0))
+    if superpoint:
+        reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, 0, False, True))
+    else:
+        reader = Process(target=image_stream, args=(queue, imagedir, calib, stride, 0))
     reader.start()
 
     while 1:
-        (t, image, intrinsics) = queue.get()
+        if superpoint:
+            (t, image, intrinsics, keypoints) = queue.get()
+        else:
+            (t, image, intrinsics) = queue.get()
         if t < 0: break
 
         image = torch.from_numpy(image).permute(2,0,1).cuda()
         intrinsics = torch.from_numpy(intrinsics).cuda()
+        if superpoint:
+            keypoints = torch.from_numpy(keypoints).cuda()
 
         if viz: 
             show_image(image, 1)
@@ -59,7 +67,7 @@ def run(cfg, network, imagedir, calib, stride=1, viz=False):
         intrinsics = intrinsics.cuda()
 
         with Timer("SLAM", enabled=False):
-            slam(t, image, intrinsics)
+            slam(t, image, intrinsics, keypoints)
 
     for _ in range(12):
         slam.update()
@@ -110,7 +118,7 @@ if __name__ == '__main__':
 
         scene_results = []
         for i in range(args.trials):
-            traj_est, timestamps = run(cfg, args.network, imagedir, "calib/euroc.txt", args.stride, args.viz)
+            traj_est, timestamps = run(cfg, args.network, imagedir, "calib/euroc.txt", args.stride, args.viz, superpoint=True)
 
             images_list = sorted(glob.glob(os.path.join(imagedir, "*.png")))[::args.stride]
             tstamps = [float(x.split('/')[-1][:-4]) for x in images_list]

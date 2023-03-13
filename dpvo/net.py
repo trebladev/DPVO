@@ -107,7 +107,7 @@ class Patchifier(nn.Module):
         g = F.avg_pool2d(g, 4, 4)
         return g
 
-    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False):
+    def forward(self, images, patches_per_image=80, disps=None, gradient_bias=False, return_color=False, return_coords=False, keypoint=None):
         """ extract patches from input images """
         fmap = self.fnet(images) / 4.0
         imap = self.inet(images) / 4.0
@@ -126,6 +126,12 @@ class Patchifier(nn.Module):
             ix = torch.argsort(g)
             x = x[:, ix[-patches_per_image:]]
             y = y[:, ix[-patches_per_image:]]
+        
+        elif keypoint is not None:
+            x = keypoint[:, 0].reshape(1, patches_per_image)
+            y = keypoint[:, 1].reshape(1, patches_per_image)
+            x = torch.div(x, 4, rounding_mode='floor')
+            y = torch.div(y, 4, rounding_mode='floor')
 
         else:
             x = torch.randint(1, w-1, size=[n, patches_per_image], device="cuda")

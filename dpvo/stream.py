@@ -5,7 +5,7 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 import time
 
-def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
+def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False, superpoint=False):
     """ image generator """
 
     calib = np.loadtxt(calib, delimiter=" ")
@@ -18,6 +18,16 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
     K[1,2] = cy
 
     image_list = sorted(Path(imagedir).glob('*.png'))[skip::stride]
+    if superpoint:
+      keypoint_list = sorted(Path(imagedir).glob('*.txt'))[skip::stride]
+      keypoint_array = np.empty((0, 96, 2))
+      for t, keyfile in enumerate(keypoint_list):
+        temp_keypoint = np.loadtxt(keyfile)
+        # temp_keypoint = temp_keypoint[:96]
+        selected_indices = np.random.choice(temp_keypoint.shape[0], size=96)
+        selected_data = temp_keypoint[selected_indices, :] 
+        keypoint_array = np.append(keypoint_array, [selected_data], axis=0)
+      assert keypoint_array.shape[0] == len(image_list) == len(keypoint_list)
 
     for t, imfile in enumerate(image_list):
         image = cv2.imread(str(imfile))
@@ -46,10 +56,15 @@ def image_stream(queue, imagedir, calib, stride, skip=0, fisheye=False):
                 
         h, w, _ = image.shape
         image = image[:h-h%16, :w-w%16]
-    
-        queue.put((t, image, intrinsics))
-    
-    queue.put((-1, image, intrinsics))
+
+        if superpoint:
+          queue.put((t, image, intrinsics, keypoint_array[t]))
+        else:
+          queue.put((t, image, intrinsics))
+    if superpoint:
+      queue.put((-1, image, intrinsics, keypoint_array[-1]))
+    else:
+      queue.put((-1, image, intrinsics))
 
 
 def video_stream(queue, imagedir, calib, stride, skip=0):
