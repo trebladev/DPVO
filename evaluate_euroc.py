@@ -12,7 +12,7 @@ from dpvo.utils import Timer
 from dpvo.dpvo import DPVO
 from dpvo.stream import image_stream
 from dpvo.config import cfg
-from dpvo.plot_utils import plot_trajectory, save_trajectory_tum_format
+# from dpvo.plot_utils import plot_trajectory, save_trajectory_tum_format
 
 import torch
 from multiprocessing import Process, Queue
@@ -127,15 +127,15 @@ if __name__ == '__main__':
                 pose_relation=PoseRelation.translation_part, align=True, correct_scale=True)
             ate_score = result.stats["rmse"]
 
-            if args.plot:
-                scene_name = '_'.join(scene.split('/')[1:]).title()
-                Path("trajectory_plots").mkdir(exist_ok=True)
-                plot_trajectory(traj_est, traj_ref, f"Euroc {scene} Trial #{i+1} (ATE: {ate_score:.03f})",
-                                f"trajectory_plots/Euroc_{scene}_Trial{i+1:02d}.pdf", align=True, correct_scale=True)
+            # if args.plot:
+            #     scene_name = '_'.join(scene.split('/')[1:]).title()
+            #     Path("trajectory_plots").mkdir(exist_ok=True)
+            #     plot_trajectory(traj_est, traj_ref, f"Euroc {scene} Trial #{i+1} (ATE: {ate_score:.03f})",
+            #                     f"trajectory_plots/Euroc_{scene}_Trial{i+1:02d}.pdf", align=True, correct_scale=True)
 
-            if args.save_trajectory:
-                Path("saved_trajectories").mkdir(exist_ok=True)
-                save_trajectory_tum_format(traj_est, f"saved_trajectories/Euroc_{scene}_Trial{i+1:02d}.txt")
+            # if args.save_trajectory:
+            #     Path("saved_trajectories").mkdir(exist_ok=True)
+            #     save_trajectory_tum_format(traj_est, f"saved_trajectories/Euroc_{scene}_Trial{i+1:02d}.txt")
 
             scene_results.append(ate_score)
 

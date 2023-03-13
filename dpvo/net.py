@@ -152,9 +152,9 @@ class Patchchosen(nn.Module):
     def forward(self, fmap, imap):
         fmap = self.c1(fmap)
         assert fmap.shape[2] == 32 and fmap.shape[3] == 32 and fmap.shape[1] == 4
-        # imap = self.c2(imap)
-        # assert imap.shape[2] == 32 and imap.shape[3] == 32 and imap.shape[1] == 4
-        # net = fmap + imap
+        imap = self.c2(imap)
+        assert imap.shape[2] == 32 and imap.shape[3] == 32 and imap.shape[1] == 4
+        net = fmap + imap
         net = fmap
         net = torch.flatten(net, 1)
         net = self.m(net)
